@@ -106,8 +106,11 @@ public class WebchatClient implements ClientModInitializer {
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             client.execute(() -> {
                 if (client.player == null) {
+                    LOGGER.warn("[DEBUG] JOIN Event fired but client.player is null!");
                     return;
                 }
+
+                LOGGER.info("[DEBUG] JOIN Event fired! Broadcasting JOIN to all WS clients.");
 
                 // Send join event
                 webInterface.broadcastMessage(

@@ -89,6 +89,25 @@ const messageSendButtonElement = /** @type {HTMLImageElement} */ (
     querySelectorWithAssertion('#message-send-button')
 );
 
+const modModalContainer = /** @type {HTMLDivElement} */ (
+    querySelectorWithAssertion('#mod-modal-container')
+);
+const modModalTitle = /** @type {HTMLHeadingElement} */ (
+    querySelectorWithAssertion('#mod-modal-title')
+);
+const modModalDuration = /** @type {HTMLInputElement} */ (
+    querySelectorWithAssertion('#mod-modal-duration')
+);
+const modModalReason = /** @type {HTMLInputElement} */ (
+    querySelectorWithAssertion('#mod-modal-reason')
+);
+const modModalSubmit = /** @type {HTMLButtonElement} */ (
+    querySelectorWithAssertion('#mod-modal-submit')
+);
+const modModalCancel = /** @type {HTMLButtonElement} */ (
+    querySelectorWithAssertion('#mod-modal-cancel')
+);
+
 /**
  * ======================
  *  Event listeners and handlers
@@ -106,6 +125,64 @@ clearRecipientElement.addEventListener('click', () => {
 // Clicked send button
 messageSendButtonElement.addEventListener('click', () => {
     sendChatMessage();
+});
+
+/** @type {string | null} */
+let currentModAction = null;
+/** @type {string | null} */
+let currentModTarget = null;
+
+/**
+ * @param {string} action
+ * @param {string} username
+ */
+function openModModal(action, username) {
+    currentModAction = action;
+    currentModTarget = username;
+    modModalTitle.textContent = `${action.charAt(0).toUpperCase() + action.slice(1)} ${username}`;
+    
+    if (action === 'kick') {
+        modModalDuration.style.display = 'none';
+        modModalDuration.value = '';
+    } else {
+        modModalDuration.style.display = 'block';
+        modModalDuration.value = '';
+    }
+    modModalReason.value = '';
+    modModalContainer.style.display = 'block';
+    modModalContainer.setAttribute('aria-hidden', 'false');
+    if (action !== 'kick') {
+        modModalDuration.focus();
+    } else {
+        modModalReason.focus();
+    }
+}
+
+function closeModModal() {
+    modModalContainer.style.display = 'none';
+    modModalContainer.setAttribute('aria-hidden', 'true');
+    currentModAction = null;
+    currentModTarget = null;
+}
+
+modModalCancel.addEventListener('click', closeModModal);
+
+modModalSubmit.addEventListener('click', () => {
+    if (!currentModAction || !currentModTarget) return;
+    
+    const duration = modModalDuration.value.trim();
+    const reason = modModalReason.value.trim();
+    
+    let cmd = `/${currentModAction} ${currentModTarget}`;
+    if (currentModAction !== 'kick' && duration) {
+        cmd += ` ${duration}`;
+    }
+    if (reason) {
+        cmd += ` ${reason}`;
+    }
+    
+    sendWebsocketMessage('chat', cmd);
+    closeModModal();
 });
 
 // Focus input on load
@@ -256,6 +333,7 @@ function handleChatMessage(message) {
         timeElement.className = 'message-time';
         messageElement.appendChild(timeElement);
 
+        let chatContentText = '';
         try {
             // Format the chat message - this uses the Component format from message_parsing
             assertIsComponent(message.payload.component);
@@ -267,6 +345,8 @@ function handleChatMessage(message) {
                 // Ignore web chat links.
                 return;
             }
+
+            chatContentText = chatContent.textContent || '';
 
             messageElement.appendChild(chatContent);
         } catch (e) {
@@ -294,6 +374,45 @@ function handleChatMessage(message) {
                     ),
                 );
             }
+        }
+
+        const rawText = chatContentText || '';
+        const prefixMatch = rawText.match(/^[^:>»]*/);
+        const rawUsername = prefixMatch ? prefixMatch[0] : rawText;
+        const pureUsername = rawUsername.replace(/[^a-zA-Z0-9_]/g, '');
+
+        if (pureUsername) {
+            const modActions = document.createElement('div');
+            modActions.className = 'mod-actions';
+            modActions.innerHTML = `
+                <button class="mod-btn ban-btn" title="Ban">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.05 3.03l 6.92 6.92c.63.63.63 1.65 0 2.27l-2.12 2.12c-.63.63-1.65.63-2.27 0l-1.41-1.41L7.54 20.55c-.2.2-.5.2-.71 0l-2.12-2.12c-.2-.2-.2-.5 0-.71L12.33 10.1l-1.41-1.41c-.63-.63-.63-1.65 0-2.27l2.12-2.12c.63-.63 1.65-.63 2.27 0l.74.73zM5.31 16.59l-.71-.71c-.78-.78-2.05-.78-2.83 0l-1.06 1.06c-.78.78-.78 2.05 0 2.83l.71.71c.78.78 2.05.78 2.83 0l1.06-1.06c.78-.78.78-2.05 0-2.83z"/></svg>
+                </button>
+                <button class="mod-btn mute-btn" title="Mute">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02 3.28c-.91.78-2.1 1.22-3.48 1.22-2.76 0-5-2.24-5-5H4.8c0 3.53 2.61 6.43 6 6.92V21h2.4v-3.58c1.36-.2 2.61-.79 3.63-1.64l-1.85-1.5zM12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v4.5l3 3v1.5zM2.1 3.51L.69 4.93 6.64 10.88c-.09.35-.14.72-.14 1.12v2h1.7v-2c0-.18.02-.36.05-.53l4 4V19c0 .55.45 1 1 1s1-.45 1-1v-2.31l6.73 6.73 1.41-1.41L2.1 3.51z"/></svg>
+                </button>
+                <button class="mod-btn kick-btn" title="Kick">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM3.86 12c0-4.49 3.65-8.14 8.14-8.14 1.83 0 3.53.61 4.9 1.63L5.49 16.9c-1.02-1.37-1.63-3.07-1.63-4.9zM12 20.14c-1.83 0-3.53-.61-4.9-1.63l11.41-11.41c1.02 1.37 1.63 3.07 1.63 4.9 0 4.49-3.65 8.14-8.14 8.14z"/></svg>
+                </button>
+            `;
+            modActions.querySelectorAll('.mod-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const mouseEvent = /** @type {MouseEvent} */ (e);
+                    mouseEvent.stopPropagation();
+                    let action = 'kick';
+                    if (btn.classList.contains('ban-btn')) action = 'ban';
+                    if (btn.classList.contains('mute-btn')) action = 'mute';
+
+                    if (mouseEvent.shiftKey) {
+                        if (action === 'ban') sendWebsocketMessage('chat', `/ban ${pureUsername} 10d`);
+                        else if (action === 'mute') sendWebsocketMessage('chat', `/mute ${pureUsername} 24h`);
+                        else if (action === 'kick') sendWebsocketMessage('chat', `/kick ${pureUsername}`);
+                    } else {
+                        openModModal(action, pureUsername);
+                    }
+                });
+            });
+            messageElement.appendChild(modActions);
         }
 
         // Storing raw scroll value. To be used to fix the scroll position down the line.
@@ -418,16 +537,18 @@ function updateWebsocketConnectionStatus(connectionStatus) {
 }
 
 function connect() {
-    ws = new WebSocket(`ws://${location.host}/chat`);
+    const wsUrl = `ws://${location.host}/chat`;
+    console.log(`[DEBUG] Attempting WebSocket connection to: ${wsUrl}`);
+    ws = new WebSocket(wsUrl);
 
     ws.onopen = function () {
-        console.log('Connected to websocket server');
+        console.log('[DEBUG] WebSocket onopen fired. Handshake successful. Connected to server at ' + wsUrl);
         updateWebsocketConnectionStatus('connected');
         reconnectAttempts = 0; // Reset attempts
     };
 
-    ws.onclose = function () {
-        console.log('Websocket connection closed. Attempting to reconnect...');
+    ws.onclose = function (event) {
+        console.log(`[DEBUG] WebSocket onclose fired. Code: ${event.code}, Reason: ${event.reason}. Clean close: ${event.wasClean}. Attempting to reconnect...`);
         updateWebsocketConnectionStatus('disconnected');
 
         if (reconnectAttempts < maxReconnectAttempts) {
@@ -437,14 +558,14 @@ function connect() {
     };
 
     ws.onerror = function (error) {
-        console.error('WebSocket error:', error);
+        console.error('[DEBUG] WebSocket onerror observed. Connection establishing failed or dropped.', error);
         updateWebsocketConnectionStatus('error');
     };
 
     ws.onmessage = function (event) {
         /** @type {string} */
         const rawJson = event.data;
-        console.log('Got websocket message:', rawJson);
+        console.log('[DEBUG] Websocket onmessage received:', rawJson);
 
         try {
             const message = parseModServerMessage(rawJson);
@@ -543,13 +664,6 @@ function sendChatMessage() {
     const player = directMessageManager.getPlayer();
     if (player) {
         message = `/w ${player.playerName} ${message}`;
-    }
-
-    if (message.startsWith('/')) {
-        if (!/^\/(tell|msg|w|me)(\s.*|$)/.test(message)) {
-            setChatInputError(true);
-            return;
-        }
     }
 
     console.log(`Sending chat message: ${message}`);

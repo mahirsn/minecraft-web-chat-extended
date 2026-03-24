@@ -42,10 +42,6 @@ public class WebInterface {
         "[\\n\\r§\u00A7\\u0000-\\u001F\\u200B-\\u200F\\u2028-\\u202F]"
     );
     private static final Pattern MULTIPLE_SPACES = Pattern.compile("\\s{2,}");
-    private static final Pattern SUPPORTED_COMMANDS = Pattern.compile(
-        "^/(msg|tell|w|me)(\\s.*|$)",
-        Pattern.CASE_INSENSITIVE
-    );
 
     private String staticFilesPath = "";
     private final AtomicBoolean shutdownInitiated = new AtomicBoolean(false);
@@ -68,6 +64,7 @@ public class WebInterface {
         try {
             server.start(WebInterface.config.httpPortNumber);
             isServerRunning.getAndSet(true);
+            LOGGER.info("[DEBUG] Web interface server successfully bound and started on port {}", WebInterface.config.httpPortNumber);
             LOGGER.info(
                 "Web interface started on port {}",
                 WebInterface.config.httpPortNumber
@@ -216,6 +213,7 @@ public class WebInterface {
     private void setupWebSocket() {
         server.unsafe.routes.ws("/chat", (ws) -> {
             ws.onConnect((ctx) -> {
+                LOGGER.info("[DEBUG] New WebSocket connection request received from: {}", ctx.session.getRemoteSocketAddress());
                 // For localhost connections pinging likely isn't needed.
                 // But if someone wants to use the mod on their phone or something it might be useful to include it.
                 ctx.enableAutomaticPings(15, TimeUnit.SECONDS);
@@ -228,11 +226,13 @@ public class WebInterface {
 
                 if (!addConnection(ctx)) {
                     LOGGER.warn(
-                        "Failed to add connection: {}",
+                        "[DEBUG] Failed to add connection: {}",
                         ctx.session.getRemoteSocketAddress()
                     );
                     return;
                 }
+                
+                LOGGER.info("[DEBUG] Successfully added connection for: {}", ctx.session.getRemoteSocketAddress());
 
                 // If minecraft is connected to a server the client needs to know.
                 // Client should never be null, but again better safe than sorry.
@@ -399,7 +399,7 @@ public class WebInterface {
             }
 
             int maxLength = 256;
-            if (SUPPORTED_COMMANDS.matcher(message).matches()) {
+            if (message.startsWith("/")) {
                 String slash = "/";
                 int end = Math.min(
                     message.length(),
